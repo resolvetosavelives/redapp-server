@@ -13,7 +13,7 @@ class NotificationService
   TWILIO_TEST_WHATSAPP_NUMBER = "+14155238886"
 
   def initialize(sms_sender: nil)
-    @test_mode = !SimpleServer.env.production?
+    @test_mode = !SimpleServer.env.production? && ENV["HEROKU_APP_NAME"] != "simple-review-pr-2660"
 
     @twilio_account_sid = ENV.fetch("TWILIO_ACCOUNT_SID")
     @twilio_auth_token = ENV.fetch("TWILIO_AUTH_TOKEN")
