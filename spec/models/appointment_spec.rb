@@ -11,6 +11,7 @@ describe Appointment, type: :model do
 
   context "Validations" do
     it_behaves_like "a record that validates device timestamps"
+    it { should validate_presence_of(:appointment_type) }
   end
 
   context "Behavior" do

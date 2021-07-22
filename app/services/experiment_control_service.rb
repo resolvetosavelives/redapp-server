@@ -11,7 +11,12 @@ class ExperimentControlService
 
       experiment.update!(state: "selecting", start_date: experiment_start.to_date, end_date: experiment_end.to_date)
 
-      eligible_ids = current_patient_candidates(experiment_start, experiment_end).shuffle!
+      eligible_ids = if name == "production test"
+        names = ["Hari AB Tester", "Vikram AB Tester", "Srihari AB Tester", "Pragati AB Tester"]
+        Patient.where(full_name: names).pluck(:id)
+      else
+        current_patient_candidates(experiment_start, experiment_end).shuffle!
+      end
 
       experiment_patient_count = (0.01 * percentage_of_patients * eligible_ids.length).round
       eligible_ids = eligible_ids.pop(experiment_patient_count)

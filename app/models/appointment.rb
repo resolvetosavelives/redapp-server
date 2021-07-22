@@ -40,6 +40,7 @@ class Appointment < ApplicationRecord
   validate :cancel_reason_is_present_if_cancelled
   validates :device_created_at, presence: true
   validates :device_updated_at, presence: true
+  validates :appointment_type, presence: true
 
   after_update :cancel_reminders, if: proc { |appt| appt.saved_changes["status"] && !appt.status_scheduled? }
 
