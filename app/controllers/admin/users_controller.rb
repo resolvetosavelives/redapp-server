@@ -45,12 +45,9 @@ class Admin::UsersController < AdminController
   end
 
   def show
-    @recent_blood_pressures = @user
-      .blood_pressures
-      .includes(:patient, :facility)
-      .order(Arel.sql("DATE(recorded_at) DESC, recorded_at ASC"))
-
-    @recent_blood_pressures = paginate(@recent_blood_pressures)
+    @recent_blood_pressures = paginate(
+      recent_bp_log(@user.blood_pressures).includes(:patient, :facility)
+    )
   end
 
   def edit

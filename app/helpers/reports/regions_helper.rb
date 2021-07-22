@@ -36,4 +36,9 @@ module Reports::RegionsHelper
   def cohort_report_type(period)
     "#{period.type.to_s.humanize}ly report"
   end
+
+  def recent_bp_log(blood_pressures)
+    blood_pressures
+      .order(Arel.sql("DATE(recorded_at at time zone 'utc' at time zone '#{CountryConfig.current[:time_zone]}') DESC, recorded_at ASC"))
+  end
 end
