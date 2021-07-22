@@ -68,4 +68,12 @@ RSpec.describe Seed::FacilitySeeder do
       expect(facilities.map(&:state).uniq).to contain_exactly(single_state)
     end
   end
+
+  it "creates multiple blocks within each facility group" do
+    seeder = Seed::FacilitySeeder.new(config: Seed::Config.new)
+    seeder.call
+    Facility.all.map(&:facility_group).uniq.each do |facility_group|
+      expect(facility_group.region.block_regions.count).to be > 1
+    end
+  end
 end

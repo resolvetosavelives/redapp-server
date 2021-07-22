@@ -4,6 +4,8 @@ module Seed
     def initialize
       @type = ENV["SEED_TYPE"] ||
         case SimpleServer.env
+        when "android_review"
+          "empty"
         when "development", "review"
           "small"
         when "test"

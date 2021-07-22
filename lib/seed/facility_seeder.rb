@@ -18,9 +18,6 @@ module Seed
       community: ["HWC", "Village"]
     }
 
-    # The max number of facilities in a block in a facility group.
-    MAX_FACILITIES_PER_BLOCK = 3.0
-
     def self.call(*args)
       new(*args).call
     end
@@ -74,9 +71,8 @@ module Seed
       FACILITY_SIZE_WEIGHTS.max_by { |_, weight| rand**(1.0 / weight) }.first
     end
 
-    def facilities_per_block
-      max_number_facilities_per_block = (number_of_facilities_per_facility_group / MAX_FACILITIES_PER_BLOCK).ceil
-      config.rand_or_max(1..max_number_facilities_per_block)
+    def max_number_of_blocks_per_facility_group
+      2
     end
 
     def organization
@@ -123,17 +119,25 @@ module Seed
     end
 
     def create_block_regions(district_region_results)
-      block_count = district_region_results.ids.size
+      # Eagerly fetch block names to avoid duplicates
+      block_count = district_region_results.ids.size * max_number_of_blocks_per_facility_group
       block_names = Seed::FakeNames.instance.blocks.sample(block_count)
-      block_regions = district_region_results.results.each_with_index.map { |row, i|
+
+      block_counter = 0
+      block_regions = district_region_results.results.flat_map { |row|
         _id, _name, path = *row
-        attrs = {
-          id: nil,
-          name: block_names[i],
-          parent_path: path,
-          region_type: "block"
+
+        max_number_of_blocks_per_facility_group.times.map {
+          attrs = {
+            id: nil,
+            name: block_names[block_counter],
+            parent_path: path,
+            region_type: "block"
+          }
+
+          block_counter += 1
+          FactoryBot.build(:region, attrs)
         }
-        FactoryBot.build(:region, attrs)
       }
       Region.import(block_regions, returning: [:id, :name, :path])
     end
