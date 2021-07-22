@@ -57,6 +57,7 @@ RSpec.describe DrugStocksQuery do
 
     before do
       allow_any_instance_of(Reports::DrugStockCalculation).to receive(:patient_days_coefficients).and_return(punjab_drug_stock_config)
+      RefreshMaterializedViews.call
     end
 
     it "computes the drug stock report totals" do

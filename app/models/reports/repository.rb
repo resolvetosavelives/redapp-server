@@ -6,8 +6,8 @@ module Reports
     include Scientist
     PERCENTAGE_PRECISION = 0
 
-    def initialize(regions, periods:, reporting_schema_v2: false)
-      @regions = Array(regions)
+    def initialize(regions, periods:, reporting_schema_v2: true)
+      @regions = Array(regions).map(&:region)
       @periods = if periods.is_a?(Period)
         Range.new(periods, periods)
       else
@@ -100,15 +100,28 @@ module Reports
 
     alias_method :adjusted_patients, :adjusted_patients_without_ltfu
 
-    # Return the running total of cumulative assigned patient counts.
+    # Returns cumulative assigned patients from facility_states - this includes LTFU
+    private def cumulative_assigned_patients_query_v2(region)
+      Reports::FacilityState.for_facility(region).order(:month_date).pluck(:month_date, :assigned_patients)
+    end
+
+    # Return the running total of cumulative assigned patient counts. Note that this *includes* LTFU.
     memoize def cumulative_assigned_patients
-      complete_monthly_assigned_patients.each_with_object({}) do |(region_entry, patient_counts), totals|
-        slug = region_entry.slug
-        next totals[slug] = Hash.new(0) if earliest_patient_recorded_at[slug].nil?
-        range = Range.new(earliest_patient_recorded_at_period[slug], periods.end)
-        totals[slug] = range.each_with_object(Hash.new(0)) { |period, sum|
-          sum[period] = sum[period.previous] + patient_counts.fetch(period, 0)
+      if reporting_schema_v2?
+        regions.each_with_object({}) { |region, result|
+          result[region.slug] = cumulative_assigned_patients_query_v2(region).each_with_object(Hash.new(0)) { |(month_date, count), hsh|
+            hsh[Period.month(month_date)] = count
+          }
         }
+      else
+        complete_monthly_assigned_patients.each_with_object({}) do |(region_entry, patient_counts), totals|
+          slug = region_entry.slug
+          next totals[slug] = Hash.new(0) if earliest_patient_recorded_at[slug].nil?
+          range = Range.new(earliest_patient_recorded_at_period[slug], periods.end)
+          totals[slug] = range.each_with_object(Hash.new(0)) { |period, sum|
+            sum[period] = sum[period.previous] + patient_counts.fetch(period, 0)
+          }
+        end
       end
     end
 
@@ -120,21 +133,45 @@ module Reports
       end
     end
 
+    private def registered_patients_query_v2(region)
+      Reports::FacilityState.for_facility(region).order(:month_date).pluck(:month_date, :monthly_registrations)
+    end
+
+    private def cumulative_registered_patients_query_v2(region)
+      Reports::FacilityState.for_facility(region).order(:month_date).pluck(:month_date, :cumulative_registrations)
+    end
+
     # Returns the full range of registered patient counts for a Region. We do this via one SQL query for each Region, because its
     # fast and easy via the underlying query.
     memoize def complete_monthly_registrations
-      items = regions.map { |region| RegionEntry.new(region, __method__, period_type: period_type) }
-      cache.fetch_multi(*items, force: bust_cache?) { |entry|
-        registered_patients_query.count(entry.region, period_type)
-      }
+      if reporting_schema_v2?
+        regions.each_with_object({}) { |region, result|
+          result[region.slug] = registered_patients_query_v2(region).each_with_object(Hash.new(0)) { |(month_date, count), hsh|
+            hsh[Period.month(month_date)] = count
+          }
+        }
+      else
+        items = regions.map { |region| RegionEntry.new(region, __method__, period_type: period_type) }
+        cache.fetch_multi(*items, force: bust_cache?) { |entry|
+          registered_patients_query.count(entry.region, period_type)
+        }
+      end
     end
 
     memoize def cumulative_registrations
-      complete_monthly_registrations.each_with_object({}) do |(region_entry, patient_counts), totals|
-        range = Range.new(patient_counts.keys.first || periods.first, periods.end)
-        totals[region_entry.slug] = range.each_with_object(Hash.new(0)) { |period, sum|
-          sum[period] = sum[period.previous] + patient_counts.fetch(period, 0)
+      if reporting_schema_v2?
+        regions.each_with_object({}) { |region, result|
+          result[region.slug] = cumulative_registered_patients_query_v2(region).each_with_object(Hash.new(0)) { |(month_date, count), hsh|
+            hsh[Period.month(month_date)] = count
+          }
         }
+      else
+        complete_monthly_registrations.each_with_object({}) do |(region_entry, patient_counts), totals|
+          range = Range.new(patient_counts.keys.first || periods.first, periods.end)
+          totals[region_entry.slug] = range.each_with_object(Hash.new(0)) { |period, sum|
+            sum[period] = sum[period.previous] + patient_counts.fetch(period, 0)
+          }
+        end
       end
     end
 
@@ -149,10 +186,22 @@ module Reports
       }
     end
 
+    private def ltfu_query_v2(region)
+      Reports::FacilityState.for_facility(region).order(:month_date).pluck(:month_date, :lost_to_follow_up)
+    end
+
     memoize def ltfu
-      region_period_cached_query(__method__) do |entry|
-        facility_ids = entry.region.facility_ids
-        Patient.for_reports.where(assigned_facility: facility_ids).ltfu_as_of(entry.period.end).count
+      if reporting_schema_v2?
+        regions.each_with_object({}) { |region, hsh|
+          hsh[region.slug] = ltfu_query_v2(region).each_with_object(Hash.new(0)) { |(month_date, count), hsh|
+            hsh[Period.month(month_date)] = count
+          }
+        }
+      else
+        region_period_cached_query(__method__) do |entry|
+          facility_ids = entry.region.facility_ids
+          Patient.for_reports.where(assigned_facility: facility_ids).ltfu_as_of(entry.period.end).count
+        end
       end
     end
 
@@ -180,7 +229,7 @@ module Reports
     private def controlled_v2
       regions.each_with_object({}).each do |region, hsh|
         if earliest_patient_recorded_at[region.slug].nil?
-          hsh[region.slug] = {}
+          hsh[region.slug] = Hash.new(0)
           next
         end
         hsh[region.slug] = control_rate_query_v2.controlled_counts(region, range: active_range(region))
@@ -204,7 +253,7 @@ module Reports
     private def uncontrolled_v2
       regions.each_with_object({}).each do |region, hsh|
         if earliest_patient_recorded_at[region.slug].nil?
-          hsh[region.slug] = {}
+          hsh[region.slug] = Hash.new(0)
           next
         end
         hsh[region.slug] = control_rate_query_v2.uncontrolled_counts(region, range: active_range(region))
