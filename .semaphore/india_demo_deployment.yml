@@ -15,7 +15,7 @@ blocks:
             - yarn install
             - bundle install --deployment --path vendor/bundle
             - cache store
-            - 'BRANCH=$SEMAPHORE_GIT_BRANCH bundle exec cap india:staging deploy'
+            - 'BRANCH=$SEMAPHORE_GIT_SHA bundle exec cap india:staging deploy'
       prologue:
         commands:
           - chmod 600 ~/.ssh/semaphore_id_rsa

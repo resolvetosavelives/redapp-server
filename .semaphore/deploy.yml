@@ -15,7 +15,7 @@ blocks:
             - yarn install
             - bundle install --deployment --path vendor/bundle
             - cache store
-            - BRANCH=$SEMAPHORE_GIT_BRANCH bundle exec cap sandbox deploy
+            - BRANCH=$SEMAPHORE_GIT_SHA bundle exec cap sandbox deploy
       prologue:
         commands:
           - chmod 600 ~/.ssh/semaphore_id_rsa
@@ -40,7 +40,10 @@ blocks:
             - yarn install
             - bundle install --deployment --path vendor/bundle
             - cache store
-            - BRANCH=$SEMAPHORE_GIT_BRANCH bundle exec cap qa deploy
+            - BRANCH=$SEMAPHORE_GIT_SHA bundle exec cap qa deploy
+queue:
+  name: Deployment queue
+  scope: project
 agent:
   machine:
     type: e1-standard-2
